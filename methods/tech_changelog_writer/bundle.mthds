@@ -1,0 +1,101 @@
+domain      = "changelog_writer"
+description = "Release Changelog Generator: takes a git commit log and version number to produce a categorized changelog with breaking change flags, migration guide, and contributor list"
+main_pipe   = "generate_changelog"
+
+# --- Concepts ---
+
+[concept.ChangeEntry]
+description = "A single change entry from the commit log with category, breaking change flag, and migration notes"
+
+[concept.ChangeEntry.structure]
+title = {type = "text", description = "User-facing title of the change", required = true}
+category = {type = "text", description = "Category of the change", required = true, choices = ["feature", "fix", "improvement", "breaking", "deprecation", "security", "performance", "documentation"]}
+description = "Detailed description of what changed"
+pr_number = "Pull request number"
+author = "Author of the change"
+breaking_change = {type = "boolean", description = "Whether this is a breaking change", required = true}
+migration_notes = "Migration instructions if this is a breaking change"
+
+[concept.ReleaseChangelog]
+description = "A complete release changelog with categorized changes, highlights, and migration guide"
+
+[concept.ReleaseChangelog.structure]
+version = {type = "text", description = "Version number", required = true}
+release_date = "Release date"
+summary = {type = "text", description = "High-level summary of the release", required = true}
+highlights = {type = "list", item_type = "text", description = "Top 3-5 highlights of the release"}
+breaking_changes = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "Breaking changes"}
+features = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "New features"}
+fixes = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "Bug fixes"}
+improvements = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "Improvements"}
+security_changes = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "Security changes"}
+deprecations = {type = "list", item_type = "concept", item_concept_ref = "changelog_writer.ChangeEntry", description = "Deprecations"}
+migration_guide = "Step-by-step migration guide for breaking changes"
+contributors = {type = "list", item_type = "text", description = "List of contributors"}
+
+# --- Pipes ---
+
+[pipe.generate_changelog]
+type = "PipeSequence"
+description = "Main pipeline: classifies commits into structured entries then composes the release changelog"
+inputs = {commit_log = "Text", version = "Text"}
+output = "ReleaseChangelog"
+steps = [
+    {pipe = "classify_changes", result = "changes"},
+    {pipe = "compose_changelog", result = "changelog"},
+]
+
+[pipe.classify_changes]
+type = "PipeLLM"
+description = "Parse commit log into structured change entries with categories and breaking change flags"
+inputs = {commit_log = "Text", version = "Text"}
+output = "ChangeEntry[]"
+model = "$engineering-structured"
+prompt = """
+You are a release manager parsing a git commit log into structured change entries.
+
+Version: $version
+
+Commit log:
+@commit_log
+
+For each meaningful change:
+1. Write a user-facing title (not the raw commit message)
+2. Classify into: feature, fix, improvement, breaking, deprecation, security, performance, or documentation
+3. Flag whether it is a breaking change (boolean)
+4. Write migration notes if breaking
+5. Extract PR number and author if available
+6. Write a brief description explaining why this change matters to users
+
+Skip merge commits and trivial changes (whitespace, typos in comments). Group related commits into single entries when they represent one logical change.
+"""
+
+[pipe.compose_changelog]
+type = "PipeLLM"
+description = "Organize change entries into a polished release changelog with highlights and migration guide"
+inputs = {changes = "ChangeEntry[]", version = "Text"}
+output = "ReleaseChangelog"
+model = "$engineering-structured"
+prompt = """
+You are a technical writer composing a release changelog for end users.
+
+Version: $version
+Change entries:
+@changes
+
+Compose the changelog:
+- version: Use the provided version
+- release_date: Use today's date
+- summary: 2-3 sentence overview of what this release brings
+- highlights: Top 3-5 most impactful changes
+- breaking_changes: All entries flagged as breaking (list first!)
+- features: New feature entries
+- fixes: Bug fix entries
+- improvements: Improvement entries
+- security_changes: Security-related entries
+- deprecations: Deprecation entries
+- migration_guide: If there are breaking changes, write a step-by-step migration guide
+- contributors: Deduplicated list of all authors
+
+Write for end users. Explain WHY changes matter, not just what changed. Order sections with breaking changes first so they are impossible to miss.
+"""

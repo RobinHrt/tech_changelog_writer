@@ -1,0 +1,14 @@
+{
+  "commit_log": {
+    "concept": "native.Text",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "version": {
+    "concept": "native.Text",
+    "content": {
+      "text": "text_value"
+    }
+  }
+}
