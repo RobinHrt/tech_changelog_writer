@@ -1,0 +1,10 @@
+[package]
+name = "changelog_writer"
+address = "github.com/RobinHrt/tech_changelog_writer"
+version = "1.0.0"
+description = "Release Changelog Generator: categorized changelog with breaking change flags and migration guide"
+license = "MIT"
+main_pipe = "generate_changelog"
+
+[exports.tech_changelog_writer]
+pipes = ["generate_changelog", "classify_changes", "compose_changelog"]
